@@ -10,6 +10,7 @@
 
 #define DEBUG 0
 #define K_TAB 9
+#define K_ENTER 10
 
 void sig_winch(int signo)
 {
@@ -150,7 +151,7 @@ int main()
         input_buf = getch();
         switch(input_buf)
         {
-            case KEY_ENTER:
+            case K_ENTER:
             {
                 if(y)
                 {
@@ -163,7 +164,7 @@ int main()
                         if(chdir(wd_r) < 0)
                         {
                             perror("Chdir error");
-                            cycle = 0;                            
+                            exit(1);
                         }
                         for(i = 0; i < n_r; i++)
                             free(namelist_r[i]);
@@ -174,7 +175,7 @@ int main()
                         if(n_r < 0)
                         {
                             perror("Scandir error");
-                            cycle = 0;    
+                            exit(1);
                         }
                         x_r = 0;
                         start_r = 0;
@@ -189,7 +190,7 @@ int main()
                         if(chdir(wd_l) < 0)
                         {
                             perror("Chdir error");
-                            cycle = 0;                 
+                            exit(1);
                         }
                         for(i = 0; i < n_l; i++)
                             free(namelist_l[i]);
@@ -200,7 +201,7 @@ int main()
                         if(n_l < 0)
                         {
                             perror("Scandir error");
-                            cycle = 0;    
+                            exit(1);
                         }
                         x_l = 0;
                         start_l = 0;
@@ -217,14 +218,14 @@ int main()
                     if(chdir(wd_l) < 0)
                     {
                         perror("Chdir error");
-                        cycle = 0;                 
+                            exit(1);
                     }
                 }else{
                     y = 1;
                     if(chdir(wd_r) < 0)
                     {
                         perror("Chdir error");
-                        cycle = 0;                 
+                            exit(1);
                     }
                 }
                 break;
@@ -294,11 +295,11 @@ int main()
     for(i = 0; i < n_l; i++)
         free(namelist_l[i]);
     free(namelist_l);
-    if(wnd = NULL)
+    if(wnd != NULL)
         delwin(wnd);
-    if(left_wnd = NULL)
+    if(left_wnd != NULL)
         delwin(left_wnd);
-    if(right_wnd = NULL)
+    if(right_wnd != NULL)
         delwin(right_wnd);
     endwin();
     return 0;
