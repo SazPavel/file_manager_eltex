@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <limits.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #define K_TAB 9
 #define K_ENTER 10
 
@@ -30,6 +30,7 @@ int main()
     struct dirent **namelist_l;
     char wd_l[PATH_MAX];
     char wd_r[PATH_MAX];
+    char wd[PATH_MAX];
     struct dirent **namelist_r;
     struct stat buff_l;
     struct stat buff_r;
@@ -142,9 +143,9 @@ int main()
 #if DEBUG
 
         move(rows - 2, 0);
-        printw("%s  ",wd_r);
+        printw("%d  ",y);
         move(rows - 4, 0);
-        printw("%s  ",wd_l);
+        printw("%d  ",x_l);
         refresh();
 #endif
         cbreak();
@@ -179,6 +180,14 @@ int main()
                         }
                         x_r = 0;
                         start_r = 0;
+                    }else{
+                        if(S_ISREG(buff_r.st_mode) && !access(namelist_r[x_r]->d_name, X_OK))
+                        {
+                            memset(&wd[0], 0, sizeof(wd));
+                            strcat(wd, "./");
+                            strcat(wd, namelist_r[x_r]->d_name);
+                            system(wd);
+                        }
                     }
                 }else{
                     stat(namelist_l[x_l]->d_name, &buff_l);
@@ -205,6 +214,14 @@ int main()
                         }
                         x_l = 0;
                         start_l = 0;
+                    }else{
+                        if(S_ISREG(buff_l.st_mode) && !access(namelist_l[x_l]->d_name, X_OK))
+                        {
+                            memset(&wd[0], 0, sizeof(wd));
+                            strcat(wd, "./");
+                            strcat(wd, namelist_l[x_l]->d_name);
+                            system(wd);
+                        }
                     }
                 }
                 break;
