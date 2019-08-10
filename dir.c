@@ -7,10 +7,21 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <pthread.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #define K_TAB 9
 #define K_ENTER 10
+#define K_C 99
+
+int wait = 1;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+struct copyParams
+{
+    char *name;
+    char *dest;
+};
 
 void sig_winch(int signo)
 {
@@ -19,21 +30,40 @@ void sig_winch(int signo)
     resizeterm(size.ws_row, size.ws_col);
 }
 
+void *copy(void *ptr)
+{
+    //sleep(1);
+    struct copyParams *params = ptr; 
+    char wd[PATH_MAX];
+    strcat(wd, "cp ./");
+    strcat(wd, params->name);
+    strcat(wd, " ");
+    strcat(wd, params->dest);
+    strcat(wd, "/");
+    system(wd);
+    //sleep(1);
+    pthread_mutex_lock(&lock);
+    wait = 0;
+    pthread_mutex_unlock(&lock);
+    return NULL;
+}
 
 int main()
 {
     WINDOW *wnd = NULL;
     WINDOW *left_wnd = NULL;
     WINDOW *right_wnd = NULL;
-    int i = 0, j = 0, input_buf = 0, n_l = 0, n_r = 0, x_l = 0, x_r = 0,
+    int i = 0, j = 0, input_buf = 0, n_l = 0, n_r = 0, x_l = 0, x_r = 0, copy_size = 0,
         y = 0, cycle = 1, rows = 0, cols = 0, start_l = 0, start_r = 0, ip = 0;
     struct dirent **namelist_l;
     char wd_l[PATH_MAX];
     char wd_r[PATH_MAX];
     char wd[PATH_MAX];
+    struct copyParams params;
     struct dirent **namelist_r;
-    struct stat buff_l;
-    struct stat buff_r;
+    struct stat buff;
+    pthread_t tid;
+    
     n_l = scandir(".", &namelist_l, 0, alphasort);
     if(n_l < 0)
     {
@@ -92,7 +122,7 @@ int main()
     init_pair(3, COLOR_BLUE, COLOR_WHITE);
     init_pair(4, COLOR_WHITE, COLOR_BLACK);
     init_pair(5, COLOR_GREEN, COLOR_BLACK);
-
+    pthread_mutex_init(&lock, NULL);
 
     while(cycle)
     {
@@ -102,8 +132,8 @@ int main()
         {
             if(!y)
             {
-                stat(namelist_l[i]->d_name, &buff_l);
-                if(S_ISDIR(buff_l.st_mode))
+                stat(namelist_l[i]->d_name, &buff);
+                if(S_ISDIR(buff.st_mode))
                 {
                     if(i == x_l)
                         wattron(left_wnd, COLOR_PAIR(3));
@@ -121,8 +151,8 @@ int main()
         {
             if(y)
             {
-                stat(namelist_r[i]->d_name, &buff_r);
-                if(S_ISDIR(buff_r.st_mode))
+                stat(namelist_r[i]->d_name, &buff);
+                if(S_ISDIR(buff.st_mode))
                 {
                     if(i == x_r)
                         wattron(right_wnd, COLOR_PAIR(3));
@@ -139,25 +169,26 @@ int main()
         wrefresh(left_wnd);
         wrefresh(right_wnd);
         refresh();
-        
-#if DEBUG
 
+#if DEBUG
         move(rows - 2, 0);
-        printw("%d  ",y);
+        printw("%s  ", wd);
         move(rows - 4, 0);
-        printw("%d  ",x_l);
+        printw("%s  ", params.dest);
         refresh();
 #endif
+
         cbreak();
         input_buf = getch();
         switch(input_buf)
         {
             case K_ENTER:
+            case KEY_ENTER:
             {
                 if(y)
                 {
-                    stat(namelist_r[x_r]->d_name, &buff_r);
-                    if(S_ISDIR(buff_r.st_mode) && !access(namelist_r[x_r]->d_name, R_OK) &&
+                    stat(namelist_r[x_r]->d_name, &buff);
+                    if(S_ISDIR(buff.st_mode) && !access(namelist_r[x_r]->d_name, R_OK) &&
                         strcmp(namelist_r[x_r]->d_name, ".") != 0)
                     {
                         strcat(wd_r, "/");
@@ -181,7 +212,7 @@ int main()
                         x_r = 0;
                         start_r = 0;
                     }else{
-                        if(S_ISREG(buff_r.st_mode) && !access(namelist_r[x_r]->d_name, X_OK))
+                        if(S_ISREG(buff.st_mode) && !access(namelist_r[x_r]->d_name, X_OK))
                         {
                             memset(&wd[0], 0, sizeof(wd));
                             strcat(wd, "./");
@@ -190,8 +221,8 @@ int main()
                         }
                     }
                 }else{
-                    stat(namelist_l[x_l]->d_name, &buff_l);
-                    if(S_ISDIR(buff_l.st_mode) && !access(namelist_l[x_l]->d_name, R_OK) && 
+                    stat(namelist_l[x_l]->d_name, &buff);
+                    if(S_ISDIR(buff.st_mode) && !access(namelist_l[x_l]->d_name, R_OK) && 
                         strcmp(namelist_l[x_l]->d_name, ".") != 0)
                     {
                         strcat(wd_l, "/");
@@ -215,7 +246,7 @@ int main()
                         x_l = 0;
                         start_l = 0;
                     }else{
-                        if(S_ISREG(buff_l.st_mode) && !access(namelist_l[x_l]->d_name, X_OK))
+                        if(S_ISREG(buff.st_mode) && !access(namelist_l[x_l]->d_name, X_OK))
                         {
                             memset(&wd[0], 0, sizeof(wd));
                             strcat(wd, "./");
@@ -224,6 +255,79 @@ int main()
                         }
                     }
                 }
+                break;
+            }
+
+            case K_C:
+            {
+                WINDOW *wnd_copy = NULL;
+                char tmp[PATH_MAX];
+                int size = 0, tmp_cycle = 1;
+                if(y)
+                {
+                    stat(namelist_r[x_r]->d_name, &buff);
+                    if(S_ISREG(buff.st_mode) && !access(namelist_r[x_r]->d_name, R_OK))
+                    {
+                        wnd_copy = newwin(rows - 2, cols/2 - 1, 1, 1);
+                        params.name = namelist_r[x_r]->d_name;
+                        params.dest = wd_l;
+                        for(i = 0; i < n_r; i++)            //need to clear, because a new file is being added
+                            free(namelist_r[i]);
+                        free(namelist_r);
+                        stat(params.name, &buff);
+                        memset(&wd[0], 0, sizeof(wd));
+                        getcwd(wd, PATH_MAX);
+                        chdir(wd_r);
+                    }
+                }else{
+                    stat(namelist_l[x_l]->d_name, &buff);
+                    if(S_ISREG(buff.st_mode) && !access(namelist_l[x_l]->d_name, R_OK))
+                    {
+                        wnd_copy = newwin(rows - 2, cols/2 - 2, 1, cols/2 + 1);
+                        params.name = namelist_l[x_l]->d_name;
+                        params.dest = wd_r;
+                        stat(params.name, &buff);
+                        for(i = 0; i < n_l; i++)            //need to clear, because a new file is being added
+                            free(namelist_l[i]);
+                        free(namelist_l);
+                        memset(&wd[0], 0, sizeof(wd));
+                        getcwd(wd, PATH_MAX);
+                        chdir(wd_l);
+                    }
+                }
+                
+                copy_size = buff.st_size;
+                strcat(tmp, params.dest);
+                strcat(tmp, "/");
+                strcat(tmp, params.name);
+                pthread_create(&tid, NULL, copy, &params);
+                while(tmp_cycle)
+                {
+                    pthread_mutex_lock(&lock);
+                    tmp_cycle = wait;
+                    pthread_mutex_unlock(&lock);
+                    if(stat(tmp, &buff) != 0)
+                        size = 0;
+                    else
+                        size = buff.st_size;
+                    wclear(wnd_copy);
+                    mvwprintw(wnd_copy, 0, 0,"%s" "%d%s", "copied: ", size * 100 / copy_size, "%");
+                    wrefresh(wnd_copy);
+                }
+                chdir(wd);
+                wclear(wnd_copy);
+                delwin(wnd_copy);
+                wrefresh(left_wnd);
+                wrefresh(right_wnd);
+                refresh();
+                pthread_join(tid, NULL);
+                if(y)
+                    n_r = scandir(wd_r, &namelist_r, 0, alphasort);
+                else
+                    n_l = scandir(wd_l, &namelist_l, 0, alphasort);
+                pthread_mutex_lock(&lock);
+                wait = 1;
+                pthread_mutex_unlock(&lock);
                 break;
             }
 
@@ -305,6 +409,7 @@ int main()
             }
         }
     }
+    pthread_mutex_destroy(&lock);
     for(i = 0; i < n_r; i++)
         free(namelist_r[i]);
     free(namelist_r);
