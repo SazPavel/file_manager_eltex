@@ -242,10 +242,7 @@ int main()
                 wrefresh(win[1]);
                 refresh();
                 pthread_join(tid, NULL);
-                if(y)
-                    n[1] = scandir(wd_win[1], &namelist[1], 0, alphasort);
-                else
-                    n[0] = scandir(wd_win[0], &namelist[0], 0, alphasort);
+                n[y] = scandir(wd_win[y], &namelist[y], 0, alphasort);
                 pthread_mutex_lock(&lock);
                 wait = 1;
                 pthread_mutex_unlock(&lock);
