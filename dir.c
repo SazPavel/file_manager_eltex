@@ -51,40 +51,30 @@ void *copy(void *ptr)
 int main()
 {
     WINDOW *wnd = NULL;
-    WINDOW *left_wnd = NULL;
-    WINDOW *right_wnd = NULL;
-    int i = 0, j = 0, input_buf = 0, n_l = 0, n_r = 0, x_l = 0, x_r = 0, copy_size = 0,
-        y = 0, cycle = 1, rows = 0, cols = 0, start_l = 0, start_r = 0, ip = 0;
-    struct dirent **namelist_l;
-    char wd_l[PATH_MAX];
-    char wd_r[PATH_MAX];
+    WINDOW *win[2] = {NULL, NULL};
+    int i = 0, j = 0, k = 0, input_buf = 0, copy_size = 0,
+        y = 0, cycle = 1, rows = 0, cols = 0, ip = 0;
+    int n[2] = {0, 0}, x[2] = {0, 0}, start[2] = {0, 0};
+    struct dirent **namelist[2];
+    char wd_win[2][PATH_MAX];
     char wd[PATH_MAX];
     struct copyParams params;
-    struct dirent **namelist_r;
     struct stat buff;
     pthread_t tid;
     
-    n_l = scandir(".", &namelist_l, 0, alphasort);
-    if(n_l < 0)
+    for(i = 0; i < 2; i++)
     {
-        perror("Scandir error");
-        exit(1);
-    }
-    n_r = scandir(".", &namelist_r, 0, alphasort);
-    if(n_r < 0)
-    {
-        perror("Scandir error");
-        exit(1);
-    }
-    if(!getcwd(wd_l, PATH_MAX))
-    {
-        perror("Getcwd error");
-        exit(1);
-    }
-    if(!getcwd(wd_r, PATH_MAX))
-    {
-        perror("Getcwd error");
-        exit(1);
+        n[i] = scandir(".", &namelist[i], 0, alphasort);
+        if(n[i] < 0)
+        {
+            perror("Scandir error");
+            exit(1);
+        }
+        if(!getcwd(wd_win[i], PATH_MAX))
+        {
+            perror("Getcwd error");
+            exit(1);
+        }
     }
     initscr();
     if(has_colors() == FALSE)
@@ -107,13 +97,13 @@ int main()
         move(i, cols/2);
         printw("|");
     }
-    left_wnd = newwin(rows - 2, cols/2 - 2, 1, 1);
+    win[0] = newwin(rows - 2, cols/2 - 2, 1, 1);
 
-    right_wnd = newwin(rows - 2, cols/2 - 2, 1, cols/2 + 1);
+    win[1] = newwin(rows - 2, cols/2 - 2, 1, cols/2 + 1);
 
     wrefresh(wnd);
-    wrefresh(left_wnd);
-    wrefresh(right_wnd);
+    wrefresh(win[0]);
+    wrefresh(win[1]);
     refresh();
     keypad(stdscr, TRUE);
     noecho();
@@ -126,55 +116,39 @@ int main()
 
     while(cycle)
     {
-        wclear(left_wnd);
-        wclear(right_wnd);
-        for(i = start_l, j = 0; i < n_l; i++, j++)
+        for(k = 0; k < 2; k++)
         {
-            if(!y)
+            wclear(win[k]);
+            for(i = start[k], j = 0; i < n[k]; i++, j++)
             {
-                stat(namelist_l[i]->d_name, &buff);
-                if(S_ISDIR(buff.st_mode))
+                if(y == k)
                 {
-                    if(i == x_l)
-                        wattron(left_wnd, COLOR_PAIR(3));
-                    else
-                        wattron(left_wnd, COLOR_PAIR(2));
+                    stat(namelist[y][i]->d_name, &buff);
+                    if(S_ISDIR(buff.st_mode))
+                    {
+                        if(i == x[y])
+                            wattron(win[k], COLOR_PAIR(3));
+                        else
+                            wattron(win[k], COLOR_PAIR(2));
+                    }else
+                        if(i == x[y])
+                            wattron(win[k], COLOR_PAIR(1));
                 }else
-                    if(i == x_l)
-                        wattron(left_wnd, COLOR_PAIR(1));
-            }else
-                wattron(left_wnd, COLOR_PAIR(5));
-            mvwprintw(left_wnd, j, 0, "%s", namelist_l[i]->d_name);
-            wattron(left_wnd, COLOR_PAIR(4));
+                    wattron(win[k], COLOR_PAIR(5));
+                mvwprintw(win[k], j, 0, "%s", namelist[k][i]->d_name);
+                wattron(win[k], COLOR_PAIR(4));
+            }
+            wrefresh(win[k]);
         }
-        for(i = start_r, j = 0; i < n_r; i++, j++)
-        {
-            if(y)
-            {
-                stat(namelist_r[i]->d_name, &buff);
-                if(S_ISDIR(buff.st_mode))
-                {
-                    if(i == x_r)
-                        wattron(right_wnd, COLOR_PAIR(3));
-                    else
-                        wattron(right_wnd, COLOR_PAIR(2));
-                }else
-                    if(i == x_r)
-                        wattron(right_wnd, COLOR_PAIR(1));
-            }else
-                wattron(right_wnd, COLOR_PAIR(5));
-            mvwprintw(right_wnd, j, 0, "%s", namelist_r[i]->d_name);
-            wattron(right_wnd, COLOR_PAIR(4));
-        }
-        wrefresh(left_wnd);
-        wrefresh(right_wnd);
         refresh();
 
+        
 #if DEBUG
+
         move(rows - 2, 0);
-        printw("%s  ", wd);
+        printw("%s  ", wd_win[y]);
         move(rows - 4, 0);
-        printw("%s  ", params.dest);
+        printw("%s  ", namelist[y][x[y]]->d_name);
         refresh();
 #endif
 
@@ -185,74 +159,37 @@ int main()
             case K_ENTER:
             case KEY_ENTER:
             {
-                if(y)
+                stat(namelist[y][x[y]]->d_name, &buff);
+                if(S_ISDIR(buff.st_mode) && !access(namelist[y][x[y]]->d_name, R_OK) &&
+                    strcmp(namelist[y][x[y]]->d_name, ".") != 0)
                 {
-                    stat(namelist_r[x_r]->d_name, &buff);
-                    if(S_ISDIR(buff.st_mode) && !access(namelist_r[x_r]->d_name, R_OK) &&
-                        strcmp(namelist_r[x_r]->d_name, ".") != 0)
+                    strcat(wd_win[y], "/");
+                    strcat(wd_win[y], namelist[y][x[y]]->d_name);
+                    if(chdir(wd_win[y]) < 0)
                     {
-                        strcat(wd_r, "/");
-                        strcat(wd_r, namelist_r[x_r]->d_name);
-                        if(chdir(wd_r) < 0)
-                        {
-                            perror("Chdir error");
-                            exit(1);
-                        }
-                        for(i = 0; i < n_r; i++)
-                            free(namelist_r[i]);
-                        free(namelist_r);
-                        memset(&wd_r[0], 0, sizeof(wd_r));
-                        getcwd(wd_r, PATH_MAX);
-                        n_r = scandir(wd_r, &namelist_r, 0, alphasort);
-                        if(n_r < 0)
-                        {
-                            perror("Scandir error");
-                            exit(1);
-                        }
-                        x_r = 0;
-                        start_r = 0;
-                    }else{
-                        if(S_ISREG(buff.st_mode) && !access(namelist_r[x_r]->d_name, X_OK))
-                        {
-                            memset(&wd[0], 0, sizeof(wd));
-                            strcat(wd, "./");
-                            strcat(wd, namelist_r[x_r]->d_name);
-                            system(wd);
-                        }
+                        perror("Chdir error");
+                        exit(1);
                     }
-                }else{
-                    stat(namelist_l[x_l]->d_name, &buff);
-                    if(S_ISDIR(buff.st_mode) && !access(namelist_l[x_l]->d_name, R_OK) && 
-                        strcmp(namelist_l[x_l]->d_name, ".") != 0)
+                    for(i = 0; i < n[y]; i++)
+                        free(namelist[y][i]);
+                    free(namelist[y]);
+                    memset(&wd_win[y][0], 0, sizeof(wd_win[y]));
+                    getcwd(wd_win[y], PATH_MAX);
+                    n[y] = scandir(wd_win[y], &namelist[y], 0, alphasort);
+                    if(n[y] < 0)
                     {
-                        strcat(wd_l, "/");
-                        strcat(wd_l, namelist_l[x_l]->d_name);
-                        if(chdir(wd_l) < 0)
-                        {
-                            perror("Chdir error");
-                            exit(1);
-                        }
-                        for(i = 0; i < n_l; i++)
-                            free(namelist_l[i]);
-                        free(namelist_l);
-                        memset(&wd_l[0], 0, sizeof(wd_l));
-                        getcwd(wd_l, PATH_MAX);
-                        n_l = scandir(wd_l, &namelist_l, 0, alphasort);
-                        if(n_l < 0)
-                        {
-                            perror("Scandir error");
-                            exit(1);
-                        }
-                        x_l = 0;
-                        start_l = 0;
-                    }else{
-                        if(S_ISREG(buff.st_mode) && !access(namelist_l[x_l]->d_name, X_OK))
-                        {
-                            memset(&wd[0], 0, sizeof(wd));
-                            strcat(wd, "./");
-                            strcat(wd, namelist_l[x_l]->d_name);
-                            system(wd);
-                        }
+                        perror("Scandir error");
+                        exit(1);
+                    }
+                    x[y] = 0;
+                    start[y] = 0;
+                }else{
+                    if(S_ISREG(buff.st_mode) && !access(namelist[y][x[y]]->d_name, X_OK))
+                    {
+                        memset(&wd[0], 0, sizeof(wd));
+                        strcat(wd, "./");
+                        strcat(wd, namelist[y][x[y]]->d_name);
+                        system(wd);
                     }
                 }
                 break;
@@ -263,39 +200,23 @@ int main()
                 WINDOW *wnd_copy = NULL;
                 char tmp[PATH_MAX];
                 int size = 0, tmp_cycle = 1;
-                if(y)
+                stat(namelist[y][x[y]]->d_name, &buff);
+                if(S_ISREG(buff.st_mode) && !access(namelist[y][x[y]]->d_name, R_OK))
                 {
-                    stat(namelist_r[x_r]->d_name, &buff);
-                    if(S_ISREG(buff.st_mode) && !access(namelist_r[x_r]->d_name, R_OK))
-                    {
+                    if(y)
                         wnd_copy = newwin(rows - 2, cols/2 - 1, 1, 1);
-                        params.name = namelist_r[x_r]->d_name;
-                        params.dest = wd_l;
-                        for(i = 0; i < n_r; i++)            //need to clear, because a new file is being added
-                            free(namelist_r[i]);
-                        free(namelist_r);
-                        stat(params.name, &buff);
-                        memset(&wd[0], 0, sizeof(wd));
-                        getcwd(wd, PATH_MAX);
-                        chdir(wd_r);
-                    }
-                }else{
-                    stat(namelist_l[x_l]->d_name, &buff);
-                    if(S_ISREG(buff.st_mode) && !access(namelist_l[x_l]->d_name, R_OK))
-                    {
+                    else
                         wnd_copy = newwin(rows - 2, cols/2 - 2, 1, cols/2 + 1);
-                        params.name = namelist_l[x_l]->d_name;
-                        params.dest = wd_r;
-                        stat(params.name, &buff);
-                        for(i = 0; i < n_l; i++)            //need to clear, because a new file is being added
-                            free(namelist_l[i]);
-                        free(namelist_l);
-                        memset(&wd[0], 0, sizeof(wd));
-                        getcwd(wd, PATH_MAX);
-                        chdir(wd_l);
-                    }
+                    params.name = namelist[y][x[y]]->d_name;
+                    params.dest = wd_win[!y];
+                    for(i = 0; i < n[y]; i++)            //need to clear, because a new file is being added
+                        free(namelist[y][i]);
+                    free(namelist[y]);
+                    stat(params.name, &buff);
+                    memset(&wd[0], 0, sizeof(wd));
+                    getcwd(wd, PATH_MAX);
+                    chdir(wd_win[1]);
                 }
-                
                 copy_size = buff.st_size;
                 strcat(tmp, params.dest);
                 strcat(tmp, "/");
@@ -317,14 +238,14 @@ int main()
                 chdir(wd);
                 wclear(wnd_copy);
                 delwin(wnd_copy);
-                wrefresh(left_wnd);
-                wrefresh(right_wnd);
+                wrefresh(win[0]);
+                wrefresh(win[1]);
                 refresh();
                 pthread_join(tid, NULL);
                 if(y)
-                    n_r = scandir(wd_r, &namelist_r, 0, alphasort);
+                    n[1] = scandir(wd_win[1], &namelist[1], 0, alphasort);
                 else
-                    n_l = scandir(wd_l, &namelist_l, 0, alphasort);
+                    n[0] = scandir(wd_win[0], &namelist[0], 0, alphasort);
                 pthread_mutex_lock(&lock);
                 wait = 1;
                 pthread_mutex_unlock(&lock);
@@ -333,71 +254,37 @@ int main()
 
             case K_TAB:
             {
-                if(y)
+                y ^= 1;
+                if(chdir(wd_win[y]) < 0)
                 {
-                    y = 0;
-                    if(chdir(wd_l) < 0)
-                    {
-                        perror("Chdir error");
-                            exit(1);
-                    }
-                }else{
-                    y = 1;
-                    if(chdir(wd_r) < 0)
-                    {
-                        perror("Chdir error");
-                            exit(1);
-                    }
+                    perror("Chdir error");
+                        exit(1);
                 }
                 break;
             }
 
             case KEY_UP:
             {
-                if(y)
+                if(x[y] > 0)
                 {
-                    if(x_r > 0)
-                    {
-                        x_r -= 1;
-                    }
-                    if(start_r > x_r)
-                        start_r -= 1;
-                }else{
-                    if(x_l > 0)
-                    {
-                        x_l -= 1;
-                    }
-                    if(start_l > x_l)
-                        start_l -= 1;
+                    x[y] -= 1;
                 }
+                if(start[y] > x[y])
+                    start[y] -= 1;
                 break;
             }
 
             case KEY_DOWN:
             {
-                if(y == 0)
+                if(x[y] < (n[y] - 1 < rows - 3 ? n[y] - 1 : rows - 3))
                 {
-                    if(x_l < (n_l - 1 < rows - 3 ? n_l - 1 : rows - 3))
-                    {
-                        x_l += 1;
-                    }else{
-                       if(n_l - 1 > rows - 3 + start_l)
-                       {
-                           x_l += 1;
-                           start_l += 1;
-                       }
-                    }
+                    x[y] += 1;
                 }else{
-                    if(x_r < (n_r - 1 < rows - 3 ? n_r - 1 : rows - 3))
-                    {
-                        x_r += 1;
-                    }else{
-                       if(n_r - 1 > rows - 3 + start_r)
-                       {
-                           x_r += 1;
-                           start_r += 1;
-                       }
-                    }
+                   if(n[y] - 1 > rows - 3 + start[y])
+                   {
+                       x[y] += 1;
+                       start[y] += 1;
+                   }
                 }
                 break;
             }
@@ -410,19 +297,19 @@ int main()
         }
     }
     pthread_mutex_destroy(&lock);
-    for(i = 0; i < n_r; i++)
-        free(namelist_r[i]);
-    free(namelist_r);
-
-    for(i = 0; i < n_l; i++)
-        free(namelist_l[i]);
-    free(namelist_l);
+    for(i = 0; i < 2; i++)
+    {
+        for(j = 0; j < n[i]; j++)
+            free(namelist[i][j]);
+        free(namelist[i]);
+    }
+    
     if(wnd != NULL)
         delwin(wnd);
-    if(left_wnd != NULL)
-        delwin(left_wnd);
-    if(right_wnd != NULL)
-        delwin(right_wnd);
+    if(win[0] != NULL)
+        delwin(win[0]);
+    if(win[1] != NULL)
+        delwin(win[1]);
     endwin();
     return 0;
 }
